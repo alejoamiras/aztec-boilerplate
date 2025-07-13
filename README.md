@@ -48,15 +48,6 @@ This runs:
 
 ## Running tests
 
-### Prerequisites
-Before running tests, ensure the Aztec sandbox is running:
-
-```bash
-aztec start --sandbox
-```
-
-The sandbox runs on `http://localhost:8080` by default.
-
 ### All tests
 Run both Noir contract tests and TypeScript integration tests:
 

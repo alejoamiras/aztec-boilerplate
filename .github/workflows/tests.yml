@@ -13,7 +13,7 @@ jobs:
       timeout-minutes: 60
 
       env:
-        AZTEC_VERSION: 0.87.2
+        AZTEC_VERSION: 0.87.5
 
       steps:
         - name: Checkout repository
@@ -43,10 +43,6 @@ jobs:
         - name: Set Aztec version
           run: |
             VERSION=$AZTEC_VERSION aztec-up
-
-        - name: Start sandbox
-          run: |
-            aztec start --sandbox &
 
         - name: Install project dependencies
           run: yarn

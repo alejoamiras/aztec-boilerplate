@@ -21,6 +21,6 @@
       "skipLibCheck": true,
       "jsx": "react-jsx"
     },
-    "include": ["src", "src/**/*.json", "src/artifacts/*", "target/**/*.json"]
+    "include": ["src", "src/**/*.json", "src/artifacts/*", "target/**/*.json", "scripts/**/*.ts", "jest.setup.ts", "jest.teardown.ts"]
   }
   
