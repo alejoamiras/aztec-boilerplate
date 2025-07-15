@@ -43,6 +43,7 @@ class SandboxManager extends EventEmitter {
     super();
     this.process = null;
     this.isReady = false;
+    this.isExternalSandbox = false; // Track if we're using external sandbox vs our own process
     this.timeout = 180000; // 180 seconds timeout (3 minutes)
     this.maxRetries = 3;
     this.verbose = options.verbose ?? false; // Default to false for clean output during testing
@@ -91,11 +92,26 @@ class SandboxManager extends EventEmitter {
   async start() {
     return new Promise((resolve, reject) => {
       console.log('🚀 Starting Aztec sandbox');
+      let resolved = false; // Prevent double resolution
+      
+      const safeResolve = (value) => {
+        if (!resolved) {
+          resolved = true;
+          resolve(value);
+        }
+      };
+      
+      const safeReject = (error) => {
+        if (!resolved) {
+          resolved = true;
+          reject(error);
+        }
+      };
       
       // Set up timeout
       this.timers.startupTimeout = setTimeout(() => {
         this.cleanup();
-        reject(new Error('❌ Sandbox startup timed out after 180 seconds'));
+        safeReject(new Error('❌ Sandbox startup timed out after 180 seconds'));
       }, this.timeout);
 
       // Let waitForPXE handle connectivity checking with its internal retry logic
@@ -104,11 +120,13 @@ class SandboxManager extends EventEmitter {
         try {
           await this.checkSandboxConnectivity();
           this.cleanupTimers();
+          this.isExternalSandbox = false; // Mark that we're using our own process
           this.isReady = true;
-          resolve(this);
+          console.log('✅ Successfully started our own sandbox process');
+          safeResolve(this);
         } catch (error) {
           this.cleanupTimers();
-          reject(new Error(`❌ Failed to connect to sandbox: ${error.message}`));
+          safeReject(new Error(`❌ Failed to connect to sandbox: ${error.message}`));
         }
       })();
 
@@ -122,9 +140,9 @@ class SandboxManager extends EventEmitter {
         this.process.on('error', (error) => {
           this.cleanupTimers();
           if (error.code === 'ENOENT') {
-            reject(new Error('❌ Aztec CLI not found. Please install it with aztec-up'));
+            safeReject(new Error('❌ Aztec CLI not found. Please install it with aztec-up'));
           } else {
-            reject(new Error(`❌ Failed to start sandbox: ${error.message}`));
+            safeReject(new Error(`❌ Failed to start sandbox: ${error.message}`));
           }
         });
 
@@ -147,14 +165,23 @@ class SandboxManager extends EventEmitter {
             }
             
             // Check for port already in use
-            if (output.includes('Port 8080 is already in use')) {
+            if (output.includes('port is already')) {
               this.cleanupTimers();
               console.log('ℹ️  Port 8080 is already in use, checking if existing sandbox is responsive');
+              
+              // Clean up our failed spawn process since we'll use external sandbox
+              if (this.process && !this.process.killed) {
+                this.process.kill('SIGTERM');
+              }
+              this.process = null;
+              
               this.checkSandboxConnectivity().then(() => {
+                this.isExternalSandbox = true; // Mark that we're using external sandbox
                 this.isReady = true;
-                resolve(this);
+                console.log('✅ Connected to existing external sandbox');
+                safeResolve(this);
               }).catch(() => {
-                reject(new Error('❌ Port 8080 is in use but sandbox is not responsive'));
+                safeReject(new Error('❌ Port 8080 is in use but sandbox is not responsive'));
               });
             }
           }
@@ -165,21 +192,32 @@ class SandboxManager extends EventEmitter {
           this.cleanupTimers();
           if (!this.isReady) {
             if (code === 0) {
-              reject(new Error('❌ Sandbox process exited unexpectedly'));
+              safeReject(new Error('❌ Sandbox process exited unexpectedly'));
             } else {
-              reject(new Error(`❌ Sandbox process exited with code ${code} and signal ${signal}`));
+              safeReject(new Error(`❌ Sandbox process exited with code ${code} and signal ${signal}`));
             }
           }
         });
 
       } catch (error) {
         this.cleanupTimers();
-        reject(new Error(`❌ Failed to spawn sandbox process: ${error.message}`));
+        safeReject(new Error(`❌ Failed to spawn sandbox process: ${error.message}`));
       }
     });
   }
 
   async stop() {
+    // If using external sandbox, only clean up our state - don't stop external process
+    if (this.isExternalSandbox) {
+      console.log('🔌 Disconnecting from external sandbox (not stopping it)');
+      this.cleanupTimers();
+      this.process = null;
+      this.isReady = false;
+      this.isExternalSandbox = false;
+      activeSandboxManager = null;
+      return;
+    }
+
     if (!this.process || this.process.killed) {
       // Clear global reference even if already stopped
       activeSandboxManager = null;
@@ -203,6 +241,7 @@ class SandboxManager extends EventEmitter {
         this.cleanupTimers();
         this.process = null;
         this.isReady = false;
+        this.isExternalSandbox = false;
         // Clear global reference
         activeSandboxManager = null;
         resolve();
@@ -216,10 +255,15 @@ class SandboxManager extends EventEmitter {
   cleanup() {
     // This is now just a synchronous wrapper for cases where we can't await
     this.cleanupTimers();
-    if (this.process && !this.process.killed) {
+    
+    // Only kill process if we own it, not if using external sandbox
+    if (!this.isExternalSandbox && this.process && !this.process.killed) {
       this.process.kill('SIGTERM');
-      this.isReady = false;
     }
+    
+    this.process = null;
+    this.isReady = false;
+    this.isExternalSandbox = false;
     // Clear global reference
     activeSandboxManager = null;
   }
