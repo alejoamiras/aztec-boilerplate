@@ -10,7 +10,6 @@ jobs:
   commitlint:
     name: Validate Commit Messages
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,26 +26,11 @@ jobs:
         run: yarn install --frozen-lockfile
 
       - name: Validate commit messages
+        if: github.event_name == 'push'
         run: yarn commitlint --from=${{ github.event.before }} --to=${{ github.sha }} --verbose
 
-  pr-title:
-    name: Validate PR Title
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'yarn'
-
-      - name: Install dependencies
-        run: yarn install --frozen-lockfile
-
       - name: Validate PR title
+        if: github.event_name == 'pull_request'
         run: echo "${{ github.event.pull_request.title }}" | yarn commitlint --verbose
 
   format-check:
