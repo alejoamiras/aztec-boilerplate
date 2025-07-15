@@ -13,7 +13,6 @@ function setupSignalHandlers() {
   if (signalHandlersSetup) return;
   
   const handleShutdown = async (signal) => {
-    console.log(`\n🛑 Received ${signal}, shutting down sandbox manager`);
     
     // Stop the active sandbox manager if it exists
     if (activeSandboxManager) {
@@ -44,33 +43,188 @@ class SandboxManager extends EventEmitter {
     this.process = null;
     this.isReady = false;
     this.isExternalSandbox = false; // Track if we're using external sandbox vs our own process
-    this.timeout = 180000; // 180 seconds timeout (3 minutes)
+    this.sandboxTimeout = 180000;
+    this.forceKillTimeout = 5000;
     this.maxRetries = 3;
-    this.verbose = options.verbose ?? false; // Default to false for clean output during testing
+    this.verbose = options.verbose ?? false;
     
     // Timer/interval tracking for centralized cleanup
-    this.timers = {
-      startupTimeout: null,
-      forceKillTimeout: null
-    };
+    this.timers = {};
     
-    // Register this manager for signal handling (only one instance should exist)
+    // Register this manager for signal handling
     activeSandboxManager = this;
     setupSignalHandlers();
+  }
+
+  /**
+   * Create a managed timer that will be automatically cleaned up
+   * @param {Function} callback - The callback function to execute
+   * @param {number} delay - Delay in milliseconds
+   * @param {string} name - Name for the timer (for debugging)
+   * @returns {object} Timer reference that can be cleared
+   */
+  createManagedTimer(callback, delay, name) {
+    const timerId = setTimeout(() => {
+      // Remove from tracked timers when it executes
+      delete this.timers[name];
+      callback();
+    }, delay);
+    
+    // Track the timer for cleanup
+    this.timers[name] = timerId;
+    
+    return {
+      id: timerId,
+      name,
+      clear: () => this.clearManagedTimer(name)
+    };
+  }
+
+  /**
+   * Clear a specific managed timer
+   * @param {string} name - Name of the timer to clear
+   */
+  clearManagedTimer(name) {
+    if (this.timers[name]) {
+      clearTimeout(this.timers[name]);
+      delete this.timers[name];
+    }
   }
 
   /**
    * Centralized cleanup of all timers and intervals
    */
   cleanupTimers() {
-    if (this.timers.startupTimeout) {
-      clearTimeout(this.timers.startupTimeout);
-      this.timers.startupTimeout = null;
+    const timerNames = Object.keys(this.timers);
+    
+    for (const name of timerNames) {
+      this.clearManagedTimer(name);
     }
-    if (this.timers.forceKillTimeout) {
-      clearTimeout(this.timers.forceKillTimeout);
-      this.timers.forceKillTimeout = null;
+  }
+
+
+
+  /**
+   * Centralized state reset - handles all instance and global state cleanup
+   * @param {boolean} preserveExternalFlag - Whether to preserve isExternalSandbox state
+   */
+  resetState(preserveExternalFlag = false) {
+    // Clean up timers first
+    this.cleanupTimers();
+    
+    // Reset instance state
+    this.process = null;
+    this.isReady = false;
+    
+    // Only reset external flag if not preserving it
+    if (!preserveExternalFlag) {
+      this.isExternalSandbox = false;
     }
+    
+    // Clear global reference
+    activeSandboxManager = null;
+  }
+
+  /**
+   * Standardized error handling - cleanup, logging, and rejection
+   * @param {Error|string} error - The error to handle
+   * @param {string} context - Context for debugging (e.g., 'process-spawn', 'connectivity')
+   * @param {Function} safeReject - Safe rejection function
+   */
+  handleError(error, context, safeReject) {
+    // Always reset state on error
+    this.resetState();
+    
+    // Create standardized error message
+    const errorMessage = error instanceof Error ? error.message : error;
+    const contextualError = new Error(`❌ ${errorMessage}`);
+    
+    // Log error with context if verbose
+    if (this.verbose) {
+      console.error(`🚨 Error in ${context}:`, errorMessage);
+    }
+    
+    // Reject with the error
+    safeReject(contextualError);
+  }
+
+  /**
+   * Spawn the Aztec sandbox process
+   * @returns {Object} The spawned process
+   */
+  spawnSandboxProcess() {
+    return spawn('aztec', ['start', '--sandbox'], {
+      stdio: 'pipe',
+    });
+  }
+
+  /**
+   * Setup event handlers for the sandbox process
+   * @param {Object} process - The spawned process
+   * @param {Function} safeResolve - Safe resolution function
+   * @param {Function} safeReject - Safe rejection function
+   */
+  setupProcessHandlers(process, safeResolve, safeReject) {
+    // Handle process errors
+    process.on('error', (error) => {
+      if (error.code === 'ENOENT') {
+        this.handleError('Aztec CLI not found. Please install it with aztec-up', 'process-spawn', safeReject);
+      } else {
+        this.handleError(`Failed to start sandbox: ${error.message}`, 'process-spawn', safeReject);
+      }
+    });
+
+    // Monitor stdout for informational messages
+    if (this.verbose) {
+      process.stdout.on('data', (data) => {
+        const output = data.toString().trim();
+        if (output) {
+          console.log(`📡 Sandbox: ${output}`);
+        }
+      });
+    }
+
+    // Monitor stderr for errors
+    process.stderr.on('data', (data) => {
+      const output = data.toString().trim();
+      if (output) {
+        if (this.verbose) {
+          console.log(`🚨 Sandbox error: ${output}`);
+        }
+        
+        // Check for port already in use
+        if (output.includes('port is already')) {
+          this.clearManagedTimer('startupTimeout'); // Clear startup timeout since we're switching to external
+          console.log('ℹ️ Port is already in use, checking if existing sandbox is responsive');
+          
+          // Clean up our failed spawn process since we'll use external sandbox
+          if (this.process) {
+            this.process.kill('SIGTERM');
+          }
+          this.process = null;
+          
+          this.checkSandboxConnectivity().then(() => {
+            this.isExternalSandbox = true; // Mark that we're using external sandbox
+            this.isReady = true;
+            console.log('✅ Connected to existing external sandbox');
+            safeResolve(this);
+          }).catch(() => {
+            this.handleError('Port 8080 is in use but sandbox is not responsive', 'external-sandbox-check', safeReject);
+          });
+        }
+      }
+    });
+
+    // Handle process exit
+    process.on('exit', (code, signal) => {
+      if (!this.isReady) {
+        if (code === 0) {
+          this.handleError('Sandbox process exited unexpectedly', 'process-exit', safeReject);
+        } else {
+          this.handleError(`Sandbox process exited with code ${code} and signal ${signal}`, 'process-exit', safeReject);
+        }
+      }
+    });
   }
 
   async checkSandboxConnectivity() {
@@ -90,6 +244,11 @@ class SandboxManager extends EventEmitter {
   }
 
   async start() {
+    // Validate that we can start
+    if (this.isReady || this.process) {
+      throw new Error('Cannot start sandbox - already running or starting');
+    }
+
     return new Promise((resolve, reject) => {
       console.log('🚀 Starting Aztec sandbox');
       let resolved = false; // Prevent double resolution
@@ -108,13 +267,13 @@ class SandboxManager extends EventEmitter {
         }
       };
       
-      // Set up timeout
-      this.timers.startupTimeout = setTimeout(() => {
+      // Set up startup timeout
+      this.createManagedTimer(() => {
         this.cleanup();
         safeReject(new Error('❌ Sandbox startup timed out after 180 seconds'));
-      }, this.timeout);
+      }, this.sandboxTimeout, 'startupTimeout');
 
-      // Let waitForPXE handle connectivity checking with its internal retry logic
+      // Start connectivity checking in parallel
       console.log('🔍 Waiting for sandbox to be ready');
       (async () => {
         try {
@@ -125,147 +284,68 @@ class SandboxManager extends EventEmitter {
           console.log('✅ Successfully started our own sandbox process');
           safeResolve(this);
         } catch (error) {
-          this.cleanupTimers();
-          safeReject(new Error(`❌ Failed to connect to sandbox: ${error.message}`));
+          this.handleError(`Failed to connect to sandbox: ${error.message}`, 'connectivity-check', safeReject);
         }
       })();
 
+      // Spawn and setup process
       try {
-        // Start the sandbox process
-        this.process = spawn('aztec', ['start', '--sandbox'], {
-          stdio: 'pipe',
-        });
-
-        // Handle process errors
-        this.process.on('error', (error) => {
-          this.cleanupTimers();
-          if (error.code === 'ENOENT') {
-            safeReject(new Error('❌ Aztec CLI not found. Please install it with aztec-up'));
-          } else {
-            safeReject(new Error(`❌ Failed to start sandbox: ${error.message}`));
-          }
-        });
-
-        // Monitor stdout for informational messages
-        if (this.verbose) {
-          this.process.stdout.on('data', (data) => {
-            const output = data.toString().trim();
-            if (output) {
-              console.log(`📡 Sandbox: ${output}`);
-            }
-          });
-        }
-
-        // Monitor stderr for errors
-        this.process.stderr.on('data', (data) => {
-          const output = data.toString().trim();
-          if (output) {
-            if (this.verbose) {
-              console.log(`🚨 Sandbox error: ${output}`);
-            }
-            
-            // Check for port already in use
-            if (output.includes('port is already')) {
-              this.cleanupTimers();
-              console.log('ℹ️  Port 8080 is already in use, checking if existing sandbox is responsive');
-              
-              // Clean up our failed spawn process since we'll use external sandbox
-              if (this.process && !this.process.killed) {
-                this.process.kill('SIGTERM');
-              }
-              this.process = null;
-              
-              this.checkSandboxConnectivity().then(() => {
-                this.isExternalSandbox = true; // Mark that we're using external sandbox
-                this.isReady = true;
-                console.log('✅ Connected to existing external sandbox');
-                safeResolve(this);
-              }).catch(() => {
-                safeReject(new Error('❌ Port 8080 is in use but sandbox is not responsive'));
-              });
-            }
-          }
-        });
-
-        // Handle process exit
-        this.process.on('exit', (code, signal) => {
-          this.cleanupTimers();
-          if (!this.isReady) {
-            if (code === 0) {
-              safeReject(new Error('❌ Sandbox process exited unexpectedly'));
-            } else {
-              safeReject(new Error(`❌ Sandbox process exited with code ${code} and signal ${signal}`));
-            }
-          }
-        });
-
+        this.process = this.spawnSandboxProcess();
+        this.setupProcessHandlers(this.process, safeResolve, safeReject);
       } catch (error) {
-        this.cleanupTimers();
-        safeReject(new Error(`❌ Failed to spawn sandbox process: ${error.message}`));
+        this.handleError(`Failed to spawn sandbox process: ${error.message}`, 'process-spawn', safeReject);
       }
     });
   }
 
   async stop() {
+    // If already stopped, or never got to start just return
+    if (!this.isReady && !this.process) {
+      return;
+    }
+
     // If using external sandbox, only clean up our state - don't stop external process
     if (this.isExternalSandbox) {
-      console.log('🔌 Disconnecting from external sandbox (not stopping it)');
-      this.cleanupTimers();
-      this.process = null;
-      this.isReady = false;
-      this.isExternalSandbox = false;
-      activeSandboxManager = null;
+      console.log('🔌 Disconnecting from external sandbox');
+      this.resetState();
       return;
     }
 
-    if (!this.process || this.process.killed) {
-      // Clear global reference even if already stopped
-      activeSandboxManager = null;
-      this.cleanupTimers();
+    if (!this.process) {
+      this.resetState();
       return;
     }
 
-    console.log('🛑 Stopping Aztec sandbox');
+    console.log('🛑 Stopping Aztec sandbox process');
     
     return new Promise((resolve) => {
       // Set up force kill timeout
-      this.timers.forceKillTimeout = setTimeout(() => {
-        if (this.process && !this.process.killed) {
+      this.createManagedTimer(() => {
+        if (this.process) {
           console.log('🔥 Force killing sandbox process');
           this.process.kill('SIGKILL');
         }
-      }, 5000);
+      }, this.forceKillTimeout, 'forceKillTimeout');
 
       // Listen for process exit
       this.process.once('exit', () => {
-        this.cleanupTimers();
-        this.process = null;
-        this.isReady = false;
-        this.isExternalSandbox = false;
-        // Clear global reference
-        activeSandboxManager = null;
+        this.resetState();
         resolve();
       });
 
-      // Send SIGTERM first (graceful shutdown)
+      // Send graceful shutdown
       this.process.kill('SIGTERM');
     });
   }
 
   cleanup() {
-    // This is now just a synchronous wrapper for cases where we can't await
-    this.cleanupTimers();
-    
     // Only kill process if we own it, not if using external sandbox
-    if (!this.isExternalSandbox && this.process && !this.process.killed) {
+    if (!this.isExternalSandbox && this.process) {
       this.process.kill('SIGTERM');
     }
     
-    this.process = null;
-    this.isReady = false;
-    this.isExternalSandbox = false;
-    // Clear global reference
-    activeSandboxManager = null;
+    // Reset all state centrally
+    this.resetState();
   }
 }
 
