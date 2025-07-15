@@ -73,26 +73,19 @@ class SandboxManager extends EventEmitter {
   }
 
   async checkSandboxConnectivity() {
-    try {
-      if (this.verbose) {
-        console.log('🔍 Checking sandbox connectivity');
-      }
-      const pxe = createPXEClient('http://localhost:8080');
-      
-      // Use waitForPXE without timeout parameter - it handles retries internally
-      await waitForPXE(pxe);
-      
-      // Additional check to ensure PXE is fully ready
-      const nodeInfo = await pxe.getNodeInfo();
-      
-      console.log(`✅ Sandbox connected! Node version: ${nodeInfo.nodeVersion}`);
-      return true;
-    } catch (error) {
-      if (this.verbose) {
-        console.log(`🔄 Sandbox not ready yet: ${error.message.substring(0, 100)}`);
-      }
-      throw error; // Let the caller handle the error
-    }
+    console.time(`✅ Sandbox ready`);
+    
+    const pxe = createPXEClient('http://localhost:8080');
+    
+    // Use waitForPXE without timeout parameter - it handles retries internally
+    await waitForPXE(pxe);
+
+    console.timeEnd(`✅ Sandbox ready`);
+    
+    // Additional check to ensure PXE is fully ready
+    const nodeInfo = await pxe.getNodeInfo();
+    
+    console.log(`🔧 Node version: ${nodeInfo.nodeVersion}`);
   }
 
   async start() {
@@ -112,7 +105,6 @@ class SandboxManager extends EventEmitter {
           await this.checkSandboxConnectivity();
           this.cleanupTimers();
           this.isReady = true;
-          console.log('✅ Aztec sandbox is ready and responsive!');
           resolve(this);
         } catch (error) {
           this.cleanupTimers();
@@ -124,7 +116,6 @@ class SandboxManager extends EventEmitter {
         // Start the sandbox process
         this.process = spawn('aztec', ['start', '--sandbox'], {
           stdio: 'pipe',
-          env: process.env
         });
 
         // Handle process errors
