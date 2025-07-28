@@ -18,13 +18,16 @@ jobs:
       # ──────────────────────────────────────────────────────────────
       # 0️⃣  SHARED TOOLING – Buildx + Aztec CLI skeleton
       # ──────────────────────────────────────────────────────────────
-      - name: Checkout repo (full history)
-        uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Set up Docker Buildx (Aztec sandbox needs BuildKit)
-        uses: docker/setup-buildx-action@v2
+      - name: Install and cache yarn
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
 
       - name: Install Aztec CLI
         run: |
@@ -87,7 +90,7 @@ jobs:
       # clean does not work correctly and is removing the benchmark results anyways
       # https://github.com/actions/checkout/issues/1201
       - name: Checkout PR branch
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           clean: false
