@@ -41,7 +41,7 @@ jobs:
       # 1️⃣  BENCHMARK BASE COMMIT
       # ──────────────────────────────────────────────────────────────
       - name: Checkout BASE branch
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.base.sha }}
 
@@ -64,9 +64,17 @@ jobs:
           VERSION=${{ steps.basever.outputs.ver }} aztec \
             start --port 8081 --pxe --pxe.nodeUrl=http://localhost:8080/ \
             --pxe.proverEnabled false &
+      
+      - name: Cache node_modules (BASE)
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-node-modules-
 
       - name: Install deps (BASE)
-        run: yarn
+        run: yarn install --frozen-lockfile
 
       - name: Compile contracts (BASE)
         run: script -e -c "${AZTEC_NARGO:-aztec-nargo} compile"
@@ -133,9 +141,17 @@ jobs:
           VERSION=${{ steps.prver.outputs.ver }} aztec \
             start --port 8081 --pxe --pxe.nodeUrl=http://localhost:8080/ \
             --pxe.proverEnabled false &
+      
+      - name: Cache node_modules (PR)
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-node-modules-
 
       - name: Install deps (PR)
-        run: yarn
+        run: yarn install --frozen-lockfile
 
       - name: Compile contracts (PR)
         run: script -e -c "${AZTEC_NARGO:-aztec-nargo} compile"
