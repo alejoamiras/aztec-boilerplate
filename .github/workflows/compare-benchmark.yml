@@ -84,9 +84,6 @@ jobs:
             target/
             src/artifacts/
           key: ${{ runner.os }}-noir-${{ env.AZTEC_VERSION }}-${{ hashFiles('src/nr/**/*', 'Nargo.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-noir-
-            ${{ runner.os }}-noir-${{ env.AZTEC_VERSION }}-
 
       - name: Compile contracts (BASE)
         if: steps.cache-noir-base.outputs.cache-hit != 'true'
@@ -175,9 +172,6 @@ jobs:
             target/
             src/artifacts/
           key: ${{ runner.os }}-noir-${{ env.AZTEC_VERSION }}-${{ hashFiles('src/nr/**/*', 'Nargo.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-noir-
-            ${{ runner.os }}-noir-${{ env.AZTEC_VERSION }}-
 
       - name: Compile contracts (PR)
         if: steps.cache-noir-pr.outputs.cache-hit != 'true'
