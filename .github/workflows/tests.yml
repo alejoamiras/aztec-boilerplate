@@ -59,9 +59,10 @@ jobs:
           path: |
             target/
             src/artifacts/
-          key: ${{ runner.os }}-noir-${{ hashFiles('src/nr/**/*', 'Nargo.toml') }}
+          key: ${{ runner.os }}-noir-${{ env.AZTEC_VERSION }}-${{ hashFiles('src/nr/**/*', 'Nargo.toml') }}
           restore-keys: |
             ${{ runner.os }}-noir-
+            ${{ runner.os }}-noir-${{ env.AZTEC_VERSION }}-
 
       - name: Compile contracts
         if: steps.cache-noir.outputs.cache-hit != 'true'
