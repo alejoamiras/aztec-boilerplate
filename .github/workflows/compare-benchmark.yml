@@ -44,26 +44,6 @@ jobs:
             fi
           fi
 
-  benchmark-skipped:
-    name: Skip benchmarks
-    needs: check-changes
-    if: needs.check-changes.outputs.should-benchmark == 'false'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Comment on PR
-        uses: peter-evans/create-or-update-comment@v4
-        with:
-          issue-number: ${{ github.event.pull_request.number }}
-          body: |
-            ## 🤖 Benchmarks Skipped
-            
-            No benchmark-relevant changes detected in this PR.
-            
-            **Benchmarks only run when these files change:**
-            - `src/nr/**/*` (Noir contract files)
-            - `Nargo.toml` (Noir configuration)
-            - `aztecVersion` in `package.json`
-
   benchmark:
     name: Run benchmark comparison
     needs: check-changes
