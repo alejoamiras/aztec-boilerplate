@@ -76,10 +76,24 @@ jobs:
       - name: Install deps (BASE)
         run: yarn install --frozen-lockfile
 
+      - name: Cache Noir compilation artifacts (BASE)
+        id: cache-noir-base
+        uses: actions/cache@v4
+        with:
+          path: |
+            target/
+            src/artifacts/
+          key: ${{ runner.os }}-noir-${{ env.AZTEC_VERSION }}-${{ hashFiles('src/nr/**/*', 'Nargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-noir-
+            ${{ runner.os }}-noir-${{ env.AZTEC_VERSION }}-
+
       - name: Compile contracts (BASE)
+        if: steps.cache-noir-base.outputs.cache-hit != 'true'
         run: script -e -c "${AZTEC_NARGO:-aztec-nargo} compile"
 
       - name: Codegen wrappers (BASE)
+        if: steps.cache-noir-base.outputs.cache-hit != 'true'
         run: script -e -c "aztec codegen target --outdir src/artifacts --force"
 
       - name: Benchmark (BASE)
@@ -153,10 +167,24 @@ jobs:
       - name: Install deps (PR)
         run: yarn install --frozen-lockfile
 
+      - name: Cache Noir compilation artifacts (PR)
+        id: cache-noir-pr
+        uses: actions/cache@v4
+        with:
+          path: |
+            target/
+            src/artifacts/
+          key: ${{ runner.os }}-noir-${{ env.AZTEC_VERSION }}-${{ hashFiles('src/nr/**/*', 'Nargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-noir-
+            ${{ runner.os }}-noir-${{ env.AZTEC_VERSION }}-
+
       - name: Compile contracts (PR)
+        if: steps.cache-noir-pr.outputs.cache-hit != 'true'
         run: script -e -c "${AZTEC_NARGO:-aztec-nargo} compile"
 
       - name: Codegen wrappers (PR)
+        if: steps.cache-noir-pr.outputs.cache-hit != 'true'
         run: script -e -c "aztec codegen target --outdir src/artifacts --force"
 
       # ──────────────────────────────────────────────────────────────
