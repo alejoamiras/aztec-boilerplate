@@ -5,7 +5,7 @@ import { startSandbox } from './scripts/start-sandbox.js';
  * Jest global setup - runs before all tests
  */
 export default async function setup() {
-  console.log('🔧 Setting up Aztec testing environment\n');
+  console.log('\n🔧 Setting up Aztec testing environment\n');
   
   try {
     // Step 1: Check Aztec CLI version
