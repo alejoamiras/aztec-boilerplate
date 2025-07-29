@@ -238,7 +238,8 @@ jobs:
   # Secure job for commenting - no code checkout, only artifact download
   comment-results:
     name: Comment benchmark results on PR
-    needs: [check-changes, benchmark]
+    needs: [benchmark]
+    # needs: [check-changes, benchmark]
     # if: needs.check-changes.outputs.should-benchmark == 'true' && needs.benchmark.result == 'success'
     if: needs.benchmark.result == 'success'
     runs-on: ubuntu-latest
