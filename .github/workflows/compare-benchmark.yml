@@ -1,7 +1,8 @@
 name: Aztec Benchmark Diff
 
 on:
-  pull_request:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: read
@@ -62,7 +63,7 @@ jobs:
       - name: Install and cache yarn
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'yarn'
 
       - name: Install Aztec CLI
@@ -226,7 +227,31 @@ jobs:
           base_suffix: '_base'
           current_suffix: '_pr'
 
-      - name: Comment diff
+      # Upload benchmark results as artifact for secure comment job
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-comparison
+          path: benchmark-comparison.md
+          retention-days: 1
+
+  # Secure job for commenting - no code checkout, only artifact download
+  comment-results:
+    name: Comment benchmark results on PR
+    needs: [check-changes, benchmark]
+    if: needs.check-changes.outputs.should-benchmark == 'true' && needs.benchmark.result == 'success'
+    runs-on: ubuntu-latest
+    
+    steps:
+      # SECURITY: Do NOT checkout PR code in this job
+      # This job has elevated permissions to comment but never touches untrusted code
+      
+      - name: Download benchmark results
+        uses: actions/download-artifact@v4
+        with:
+          name: benchmark-comparison
+          
+      - name: Comment benchmark diff on PR
         uses: peter-evans/create-or-update-comment@v4
         with:
           issue-number: ${{ github.event.pull_request.number }}
