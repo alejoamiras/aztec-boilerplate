@@ -12,43 +12,43 @@ env:
   BENCH_DIR: ./benchmarks
 
 jobs:
-  # check-changes:
-  #   name: Check for benchmark-relevant changes
-  #   runs-on: ubuntu-latest
-  #   outputs:
-  #     should-benchmark: ${{ steps.changes.outputs.should-benchmark }}
-  #   steps:
-  #     - name: Checkout repository
-  #       uses: actions/checkout@v4
-  #       with:
-  #         fetch-depth: 0
+  check-changes:
+    name: Check for benchmark-relevant changes
+    runs-on: ubuntu-latest
+    outputs:
+      should-benchmark: ${{ steps.changes.outputs.should-benchmark }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-  #     - name: Check for relevant changes
-  #       id: changes
-  #       run: |
-  #         echo "Checking for changes that would affect benchmarks..."
+      - name: Check for relevant changes
+        id: changes
+        run: |
+          echo "Checking for changes that would affect benchmarks..."
           
-  #         # Check if Noir contracts, config, or benchmarks changed
-  #         if git diff --name-only ${{ github.event.pull_request.base.sha }} HEAD | grep -E '^(src/nr/|Nargo\.toml|benchmarks/)'; then
-  #           echo "📝 Noir contracts, config, or benchmark files changed"
-  #           echo "should-benchmark=true" >> $GITHUB_OUTPUT
-  #         else
-  #           echo "📁 No Noir contract, config, or benchmark changes detected"
+          # Check if Noir contracts, config, or benchmarks changed
+          if git diff --name-only ${{ github.event.pull_request.base.sha }} HEAD | grep -E '^(src/nr/|Nargo\.toml|benchmarks/)'; then
+            echo "📝 Noir contracts, config, or benchmark files changed"
+            echo "should-benchmark=true" >> $GITHUB_OUTPUT
+          else
+            echo "📁 No Noir contract, config, or benchmark changes detected"
             
-  #           # Check for AZTEC_VERSION change in package.json
-  #           if git diff ${{ github.event.pull_request.base.sha }} HEAD package.json | grep -q 'aztecVersion'; then
-  #             echo "🔄 AZTEC_VERSION changed in package.json"
-  #             echo "should-benchmark=true" >> $GITHUB_OUTPUT
-  #           else
-  #             echo "⏭️ No benchmark-relevant changes detected, skipping benchmarks"
-  #             echo "should-benchmark=false" >> $GITHUB_OUTPUT
-  #           fi
-  #         fi
+            # Check for AZTEC_VERSION change in package.json
+            if git diff ${{ github.event.pull_request.base.sha }} HEAD package.json | grep -q 'aztecVersion'; then
+              echo "🔄 AZTEC_VERSION changed in package.json"
+              echo "should-benchmark=true" >> $GITHUB_OUTPUT
+            else
+              echo "⏭️ No benchmark-relevant changes detected, skipping benchmarks"
+              echo "should-benchmark=false" >> $GITHUB_OUTPUT
+            fi
+          fi
 
   benchmark:
     name: Run benchmark comparison
-    # needs: check-changes
-    # if: needs.check-changes.outputs.should-benchmark == 'true'
+    needs: check-changes
+    if: needs.check-changes.outputs.should-benchmark == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -238,10 +238,8 @@ jobs:
   # Secure job for commenting - no code checkout, only artifact download
   comment-results:
     name: Comment benchmark results on PR
-    needs: [benchmark]
-    # needs: [check-changes, benchmark]
-    # if: needs.check-changes.outputs.should-benchmark == 'true' && needs.benchmark.result == 'success'
-    if: needs.benchmark.result == 'success'
+    needs: [check-changes, benchmark]
+    if: needs.check-changes.outputs.should-benchmark == 'true' && needs.benchmark.result == 'success'
     runs-on: ubuntu-latest
     
     steps:
