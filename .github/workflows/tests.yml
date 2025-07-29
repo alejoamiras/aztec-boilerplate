@@ -40,10 +40,7 @@ jobs:
         run: |
           AZTEC_VERSION=$(node -p "require('./package.json').config.aztecVersion")
           echo "version=$AZTEC_VERSION" >> "$GITHUB_OUTPUT"
-          echo "Aztec version is ${{ steps.aztec-version.outputs.version }}"
-
-      - name: Set up Docker
-        uses: docker/setup-buildx-action@v3    
+          echo "Aztec version is ${{ steps.aztec-version.outputs.version }}" 
 
       - name: Install Aztec CLI
         run: |
