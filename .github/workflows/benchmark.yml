@@ -1,4 +1,4 @@
-name: Aztec Benchmark Diff
+name: Aztec Benchmark
 
 on:
   pull_request_target:
@@ -232,9 +232,12 @@ jobs:
         run: script -e -c "aztec codegen target --outdir src/artifacts --force"
 
       # ──────────────────────────────────────────────────────────────
-      # 3️⃣  DIFF &  COMMENT
+      # 3️⃣  DIFF &  UPLOAD ARTIFACTS
       # ──────────────────────────────────────────────────────────────
       - name: Generate Markdown diff
+        run: npx aztec-benchmark --suffix _pr --output-dir ${{ env.BENCH_DIR }}
+
+      - name: Generate benchmark comparison
         uses: defi-wonderland/aztec-benchmark/action@main
         with:
           base_suffix: '_base'
