@@ -1,12 +1,8 @@
-name: Aztec Benchmark Diff
+name: Aztec Benchmark
 
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, synchronize, reopened]
-
-permissions:
-  contents: read
-  pull-requests: write
 
 env:
   BENCH_DIR: ./benchmarks
@@ -232,40 +228,33 @@ jobs:
         run: script -e -c "aztec codegen target --outdir src/artifacts --force"
 
       # ──────────────────────────────────────────────────────────────
-      # 3️⃣  DIFF &  COMMENT
+      # 3️⃣  DIFF &  UPLOAD ARTIFACTS
       # ──────────────────────────────────────────────────────────────
       - name: Generate Markdown diff
+        run: npx aztec-benchmark --suffix _pr --output-dir ${{ env.BENCH_DIR }}
+
+      - name: Generate benchmark comparison
         uses: defi-wonderland/aztec-benchmark/action@main
         with:
           base_suffix: '_base'
           current_suffix: '_pr'
 
-      # Upload benchmark results as artifact for secure comment job
-      - name: Upload benchmark results
+      # SECURITY: Upload results for secure comment workflow
+      - name: Upload benchmark results and metadata
         uses: actions/upload-artifact@v4
         with:
-          name: benchmark-comparison
-          path: benchmark-comparison.md
+          name: benchmark-results
+          path: |
+            benchmark-comparison.md
           retention-days: 1
 
-  # Secure job for commenting - no code checkout, only artifact download
-  comment-results:
-    name: Comment benchmark results on PR
-    needs: [check-changes, benchmark]
-    if: needs.check-changes.outputs.should-benchmark == 'true' && needs.benchmark.result == 'success'
-    runs-on: ubuntu-latest
-    
-    steps:
-      # SECURITY: Do NOT checkout PR code in this job
-      # This job has elevated permissions to comment but never touches untrusted code
-      
-      - name: Download benchmark results
-        uses: actions/download-artifact@v4
+      - name: Save PR number for comment workflow
+        run: |
+          echo "${{ github.event.number }}" > pr-number.txt
+
+      - name: Upload PR metadata
+        uses: actions/upload-artifact@v4
         with:
-          name: benchmark-comparison
-          
-      - name: Comment benchmark diff on PR
-        uses: peter-evans/create-or-update-comment@v4
-        with:
-          issue-number: ${{ github.event.pull_request.number }}
-          body-file: benchmark-comparison.md
+          name: pr-metadata
+          path: pr-number.txt
+          retention-days: 1
