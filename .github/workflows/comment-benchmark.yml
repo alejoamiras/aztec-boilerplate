@@ -1,4 +1,4 @@
-name: Comment Benchmark Results
+name: Comment Results
 
 # SECURITY: workflow_run trigger = elevated permissions, no fork code access
 on:
@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   comment:
-    name: Comment benchmark results on PR
+    name: Comment results
     runs-on: ubuntu-latest
     if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success'
     
@@ -107,7 +107,7 @@ jobs:
           echo "pr-number=$PR_NUMBER" >> $GITHUB_OUTPUT
           echo "Found PR number: $PR_NUMBER"
 
-      - name: Comment benchmark results on PR
+      - name: Comment results
         if: steps.extract-results.outputs.results-available == 'true'
         uses: peter-evans/create-or-update-comment@v4
         with:
