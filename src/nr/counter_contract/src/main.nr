@@ -50,6 +50,6 @@ pub contract Counter {
     #[internal]
     fn increment_internal() {
         let current_value = storage.counter.read();
-        storage.counter.write(current_value + 1);
+        storage.counter.write(current_value + 10);
     }
 }
