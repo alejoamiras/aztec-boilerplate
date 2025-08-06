@@ -230,8 +230,6 @@ jobs:
       # ──────────────────────────────────────────────────────────────
       # 3️⃣  DIFF &  UPLOAD ARTIFACTS
       # ──────────────────────────────────────────────────────────────
-      - name: Generate Markdown diff
-        run: npx aztec-benchmark --suffix _pr --output-dir ${{ env.BENCH_DIR }}
 
       - name: Generate benchmark comparison
         uses: defi-wonderland/aztec-benchmark/action@main
