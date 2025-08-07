@@ -8,5 +8,7 @@
   },
   "testRegex": "./src/.*\\.test\\.ts$",
   "rootDir": "./src",
-  "testTimeout": 30000
+  "testTimeout": 30000,
+  "globalSetup": "<rootDir>/../jest.setup.js",
+  "globalTeardown": "<rootDir>/../jest.teardown.js"
 }
