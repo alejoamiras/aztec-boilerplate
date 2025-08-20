@@ -1,5 +1,5 @@
-import { checkAztecVersion } from "./scripts/check-aztec-version.js";
-import { startSandbox } from "./scripts/start-sandbox.js";
+import { checkAztecVersion } from "./scripts/check-aztec-version.ts";
+import { startSandbox } from "./scripts/start-sandbox.ts";
 
 /**
  * Vitest global setup - runs before all tests
