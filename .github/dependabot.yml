@@ -25,9 +25,6 @@ updates:
           - "lint-staged"
           - "vitest"
           - "typescript"
-      github-actions:
-        patterns:
-          - "actions/*"
 
   # Enable version updates for GitHub Actions
   - package-ecosystem: "github-actions"
